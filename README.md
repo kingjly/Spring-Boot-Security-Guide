@@ -129,19 +129,166 @@ web.xml文件中，进行如下配置：
 
 https://github.com/alibaba/druid/wiki/%E9%85%8D%E7%BD%AE_StatViewServlet%E9%85%8D%E7%BD%AE
 
-## 2、API安全风险防范
+## 2 API安全风险防范
 
-### 失效的对象级授权
+### 2.1 失效的对象级授权
 
-### 失效的用户身份验证 
+#### 风险说明
 
-### 失效的对象属性级授权
+攻击者可以通过操纵在请求中发送的对象的ID来利用容易受到破坏的对象级授权攻击的API端点。对象ID可以是从连续整数、UUID或泛型字符串中的任何内容。例如api端点： /shops/{shopName}/revenue_data，攻击者替换shopname的值，如果权限校验不当，可能越权访问其他商户信息。
 
-### 无限制资源消耗
+#### 安全实践
 
-### 失效的功能级授权
+##### 实现依赖于用户策略和层级的适当授权机制
 
-### 服务端请求伪造
+参考如下拦截器实现
+
+```
+@Component
+public class AuthorizeInterceptor implements HandlerInterceptor {
+
+    private static final String USER_KEY = "APP_USER_ID";
+
+    @Autowired
+    UserService userService;
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        if(!(handler instanceof HandlerMethod)){
+            return true;
+        }
+        final String userId = request.getHeader(USER_KEY);
+        if(canAccess(userId,request.getRequestURI())){
+            return true;
+        }
+        //处理鉴权失败
+//        final Rsp rsp = Rsp.fail(403, "无权访问");
+        Map<String,Object> rsp = new HashMap<>(2);
+        rsp.put("code",403);
+        rsp.put("msg","无权访问");
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("application/json; charset=utf-8");
+        final PrintWriter writer = response.getWriter();
+        writer.write(JSON.toJSONString(rsp));
+        return false;
+    }
+
+    private boolean canAccess(String userId,String path) {
+        if(userId == null){
+            return false;
+        }
+        final Set<String> userAccessUrls = userService.getUserAccessUrls(userId);
+        return userAccessUrls.contains(path);
+    }
+
+}
+```
+
+##### 使用随机和不可预测的值作为记录ID的GUID
+
+可考虑生成随机id作为主键，具体实现参考
+
+百度UidGenerator： https://github.com/baidu/uid-generator
+
+美团Leaf： https://github.com/Meituan-Dianping/Leaf
+
+阿里巴巴Seata：https://github.com/seata/seata
+
+##### 编写测试用例以评估授权机制的脆弱性
+
+参考测试用例1：
+
+- get、post参数内是否有userid
+  - 无 -- 测试通过无问题
+  - 有 -- 执行下一步测试判断是否为假参数
+
+- 请求参数内有当前用户的userid， 删除该参数判断接口返回
+  - 接口正常执行（表示此参数为假参数、未使用）-- 测试通过
+  - 接口异常（表示后端错误使用userid -- 存在越权
+
+参考测试用例2：
+
+- 资源id替换后，重放请求 （用户1- 动作1-对象id1 替换成 用户1- 动作1-对象id2）
+  - 接口运行异常，无法正常完成功能 -- 测试通过
+  - 接口运行效果一致 -- 存在越权
+
+#### 参考链接
+
+https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/
+
+https://blog.csdn.net/luostudent/article/details/124119997
+
+https://zhuanlan.zhihu.com/p/413297914
+
+### 2.2 失效的用户身份验证 
+
+#### 风险说明
+
+身份验证机制很容易成为攻击者的目标，因为它对所有人都是公开的。软件和安全工程师对身份验证边界和固有实现复杂性的误解使身份验证问题普遍存在。
+
+API在以下情况下易受攻击：
+
+- 允许攻击者对同一用户帐户执行暴力攻击，而不提供验证码/帐户锁定机制
+- 允许弱密码
+- 发送敏感的身份验证详细信息，例如URL中携带token和密码
+- 允许用户更改其电子邮件地址、当前密码或执行任何其他敏感操作，而无需密码确认
+- 不验证令牌的真实性
+- 接受未签名/弱签名的JWT令牌（ `{"alg":"none"}` ）
+- 不验证JWT到期日期
+- 使用纯文本、非加密或弱散列密码
+- 使用弱加密密钥
+
+#### 安全实践
+
+##### 不要在身份验证、令牌生成或密码存储方面重复造轮子。使用业界标准组件
+
+例如：Spring Security、Shiro、JWT等
+
+##### 了解应用的身份验证机制。确保知道它们是什么以及是如何使用的
+
+##### 在可能的情况下，实施多因素身份验证
+
+#### 参考链接
+
+https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/
+
+### 2.3 失效的对象属性级授权
+
+#### 风险说明
+
+
+
+#### 安全实践
+
+
+
+### 2.4 无限制资源消耗
+
+#### 风险说明
+
+
+
+#### 安全实践
+
+
+
+### 2.5 失效的功能级授权
+
+#### 风险说明
+
+
+
+#### 安全实践
+
+
+
+### 2.6 服务端请求伪造
+
+#### 风险说明
+
+
+
+#### 安全实践
 
 
 
